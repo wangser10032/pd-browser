@@ -1,0 +1,62 @@
+name: Publish FP Browser v1.3.0
+
+"on":
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-v1.3.0.yml']
+
+permissions: {}
+
+concurrency:
+  group: fpbrowser-publish-v1.3.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'wangser10032/pd-browser'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify and publish the prepared APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/fpbrowser-release"
+          mkdir -p "$release_dir"
+          apk="$release_dir/FPBrowser-v1.3.0.apk"
+          notes="$release_dir/release-notes.md"
+          gh api "repos/$GITHUB_REPOSITORY/git/blobs/afd2adf85b58db935e434ca43dc303366e4bb7e6" --jq '.content' | base64 --decode > "$apk"
+          printf '%s  %s\n' '5d87e89546c2fea01766c2bced26cbcb447ae37e833945da934c7fba1a5a971d' "$apk" | sha256sum --check
+          cat > "$notes" <<'RELEASE_NOTES'
+          新增网页文件上传、视频全屏、网站摄像头和麦克风权限管理、无痕窗口，以及书签整理和数据管理功能。
+          
+          更新内容
+          
+          - 网页文件上传：支持系统文件选择器、多选和文件类型过滤，可用于邮件附件和 Claude 文件上传；请求沿用浏览器的代理。
+          - 视频全屏：支持横屏播放、隐藏状态栏，按返回键退出全屏。
+          - 网站权限：摄像头和麦克风按网站询问，可记住选择，并在“设置 → 数据 → 网站权限”中重置；禁用 WebRTC 时继续阻止 RTCPeerConnection。
+          - 无痕窗口：不记录历史、不保存窗口；WebView 支持多配置文件时隔离 Cookie 和网站数据，不支持时会显示共享 Cookie 的提示。
+          - 退出时清除：可选择历史、缓存、网站存储、Cookie 和窗口；默认关闭，开启清除 Cookie 后需要重新登录。
+          - 网页工具：新增保存为 PDF、打印、添加到桌面；分享网页时附带标题。
+          - 书签文件夹：支持新建、重命名、移动、删除和返回上级。
+          - 书签导入和导出：支持标准书签 HTML，重复导入会自动合并。
+          - 数据库升级：保留已有书签、快捷方式和历史。
+          
+          本版也包含 v1.2.0 的 Claude 浏览器兼容修复、界面更新、Cookie 导入和导出、代理复制和粘贴，以及 App 内远程更新功能。
+          
+          安装与更新
+          
+          - v1.1.0 及更早版本需要手动下载 APK，直接覆盖安装。
+          - 已安装 v1.2.0 的用户可在“设置 → 关于 → 检查更新”中下载本版。
+          - 本版包名为 com.fpbrowser，versionCode 为 5，沿用原签名。直接覆盖安装可保留登录状态、Cookie、书签、历史和设置；请勿先卸载。
+          RELEASE_NOTES
+          if gh release view v1.3.0 --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo 'The v1.3.0 release already exists; refusing to overwrite it.'
+            exit 1
+          fi
+          gh release create v1.3.0 "$apk" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title v1.3.0 --notes-file "$notes" --latest
+          gh release view v1.3.0 --repo "$GITHUB_REPOSITORY" --json url,tagName,isDraft,isPrerelease
